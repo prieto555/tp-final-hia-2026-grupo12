@@ -1,0 +1,48 @@
+# --- Secretos: nunca al repositorio ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+
+# --- Volcados y copias de la base: van al volumen y a Nextcloud, no acá ---
+*.sql
+!infra/postgres/**/*.sql
+*.dump
+*.tar.gz
+backups/
+
+# --- Dependencias y artefactos de compilación ---
+node_modules/
+dist/
+.angular/
+coverage/
+
+# --- Sistema operativo y editores ---
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# --- Logs ---
+*.log
+npm-debug.log*
+
+# Punto 11: token de API de Mantis, emitido por preparar-mantis.sh
+infra/incidencias/.token-api
+
+# Punto 13: secreto que comparten Alertmanager y el webhook de n8n,
+# generado por preparar-n8n.sh
+infra/prometheus/.token-alertas
+
+# Punto 9: credenciales del tunel de Cloudflare y la configuracion generada
+# a partir de la plantilla. Las genera infra/tunel/preparar-tunel.sh.
+infra/tunel/.credenciales.json
+infra/tunel/config.generado.yml
+# Red de seguridad: cloudflared nombra el archivo de credenciales con el id
+# del tunel (<uuid>.json) cuando se lo crea a mano, no con preparar-tunel.sh.
+# Esa variante no la cubren las dos lineas de arriba.
+infra/tunel/*.json
