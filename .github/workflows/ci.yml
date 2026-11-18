@@ -112,9 +112,27 @@ jobs:
   # Vulnerabilidades de dependencias (punto 14).
   #
   # Se separan produccion y desarrollo a proposito: una vulnerabilidad en una
-  # dependencia de produccion del frontend viaja al navegador del usuario; una
-  # de desarrollo corre en la maquina que compila. No son la misma gravedad y
-  # mezclarlas infla el numero sin decir nada.
+  # dependencia de produccion viaja a la imagen que se publica o al navegador
+  # del usuario; una de desarrollo corre en la maquina del que programa. No son
+  # la misma gravedad y mezclarlas infla el numero sin decir nada.
+  #
+  # LOS DOS LADOS SE AUDITAN IGUAL, y hasta el 18/11 no era asi: el frontend ya
+  # separaba produccion de desarrollo y el backend se auditaba entero. El 17/11
+  # eso dejo develop en rojo.
+  #
+  # Las cinco vulnerabilidades ALTAS que lo cortaron -la cadena picomatch,
+  # anymatch, readdirp, chokidar- salen todas de nodemon, la unica
+  # devDependency del backend: el programa que recarga el servidor mientras se
+  # programa. No entra a la imagen y no llega a produccion.
+  #
+  # Y al dia siguiente el MISMO comando, sobre el MISMO package-lock, devolvio
+  # 7 moderadas y 0 altas, porque el aviso dejo de publicarse. Es decir: el
+  # pipeline se puso rojo y se volvio verde solo, sin que nadie tocara una
+  # linea de codigo. Lo que cambio fue la base de avisos de npm, que es
+  # externa al repositorio.
+  #
+  # De ahi la regla: el pipeline frena por lo que se PUBLICA, e informa sobre
+  # lo que se usa para programar.
   # ---------------------------------------------------------------------------
   auditoria:
     name: Auditoria de dependencias
@@ -126,8 +144,17 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Backend (todas las dependencias)
+      - name: Backend (solo produccion)
         working-directory: backend
+        run: npm audit --omit=dev --audit-level=high
+
+      # Las de desarrollo del backend se informan y no frenan, por el mismo
+      # motivo que las del frontend: quedan a la vista en el registro de la
+      # corrida para poder revisarlas, sin poner en rojo una canalizacion por
+      # algo que no se publica.
+      - name: Backend (desarrollo, solo informativo)
+        working-directory: backend
+        continue-on-error: true
         run: npm audit --audit-level=high
 
       - name: Frontend (solo produccion)
