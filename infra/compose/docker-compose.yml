@@ -241,6 +241,26 @@ services:
     depends_on:
       - backend
 
+  # Runner de GitHub Actions para desplegar main en esta misma maquina.
+  # Solo se levanta a proposito: necesita un token de registro vigente y
+  # acceso al socket de Docker del host para ejecutar desplegar.sh.
+  runner:
+    profiles: ["despliegue"]
+    image: myoung34/github-runner@sha256:107f1eaea02a096794a3579416e9c703141e62807fe44c39af9eef4795c275e3
+    container_name: restoya_runner
+    restart: unless-stopped
+    environment:
+      REPO_URL: ${RUNNER_REPO_URL:?falta RUNNER_REPO_URL en el .env}
+      RUNNER_TOKEN: ${RUNNER_TOKEN:?falta RUNNER_TOKEN en el .env}
+      RUNNER_NAME: ${RUNNER_NAME:-restoya-produccion}
+      RUNNER_SCOPE: repo
+      LABELS: restoya-produccion
+      EPHEMERAL: "false"
+      DISABLE_AUTO_UPDATE: "true"
+      RUNNER_WORKDIR: ${RUTA_RUNNER_EN_EL_DEMONIO:?falta RUTA_RUNNER_EN_EL_DEMONIO en el .env}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "${RUTA_RUNNER_EN_EL_DEMONIO:?falta RUTA_RUNNER_EN_EL_DEMONIO en el .env}:${RUTA_RUNNER_EN_EL_DEMONIO:?falta RUTA_RUNNER_EN_EL_DEMONIO en el .env}"
 
   # ---------------------------------------------------------------------------
   # Monitoreo (punto 10). Perfil aparte: el stack de datos y la aplicacion se

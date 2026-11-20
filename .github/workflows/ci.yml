@@ -198,6 +198,8 @@ jobs:
           DB_NAME=restoyadb
           DB_USER=restoya
           DB_PORT_HOST=5433
+          DB_HOST=db
+          DB_PORT=5432
           PGADMIN_EMAIL=ci@example.com
           PGADMIN_PORT=5050
           BACKUP_INTERVALO=86400
@@ -276,7 +278,7 @@ jobs:
       # ninguna de las dos ramas por separado lo disparaba.
       - name: Validar el docker-compose.yml
         working-directory: infra/compose
-        run: docker compose --profile app config > /dev/null
+        run: docker compose --profile app --profile simple config > /dev/null
 
       # El volumen pgdata esta declarado como "external" en el compose, y es a
       # proposito: existia antes que el compose, en la maquina del equipo, y
@@ -289,7 +291,7 @@ jobs:
 
       - name: Levantar la aplicacion
         working-directory: infra/compose
-        run: docker compose --profile app up -d --build
+        run: docker compose --profile app --profile simple up -d --build
 
       # Se espera a la API y no al frente. El frente es estatico: nginx lo
       # sirve en cuanto arranca, asi que esperar a que responda no dice nada
@@ -314,8 +316,8 @@ jobs:
               000|502|503|504)
                 if [ "$i" = 90 ]; then
                   echo "La API no respondio en 180 s (ultimo codigo: $codigo)."
-                  docker compose --profile app ps
-                  docker compose --profile app logs --tail=150
+                  docker compose --profile app --profile simple ps
+                  docker compose --profile app --profile simple logs --tail=150
                   exit 1
                 fi
                 sleep 2
@@ -374,12 +376,12 @@ jobs:
           # en "running": si se mira el estado en un instante cualquiera, el
           # bucle del punto 14 (una variable sin declarar) habria pasado
           # desapercibido. RestartCount > 0 no se puede disimular.
-          docker compose --profile app ps -a \
+          docker compose --profile app --profile simple ps -a \
             --format '{{.Name}}	{{.State}}	{{.Status}}'
           echo
 
           malos=0
-          for c in $(docker compose --profile app ps -aq); do
+          for c in $(docker compose --profile app --profile simple ps -aq); do
             datos=$(docker inspect -f '{{.Name}} {{.State.Status}} {{.RestartCount}}' "$c")
             nombre=$(echo "$datos" | cut -d' ' -f1)
             estado=$(echo "$datos" | cut -d' ' -f2)
@@ -395,7 +397,7 @@ jobs:
           done
 
           if [ "$malos" = 1 ]; then
-            docker compose --profile app logs --tail=150
+            docker compose --profile app --profile simple logs --tail=150
             exit 1
           fi
           echo "Bien: ninguno se reinicio."
@@ -403,9 +405,9 @@ jobs:
       - name: Registro de los contenedores
         if: always()
         working-directory: infra/compose
-        run: docker compose --profile app logs --tail=200
+        run: docker compose --profile app --profile simple logs --tail=200
 
       - name: Bajar todo
         if: always()
         working-directory: infra/compose
-        run: docker compose --profile app down -v
+        run: docker compose --profile app --profile simple down -v
