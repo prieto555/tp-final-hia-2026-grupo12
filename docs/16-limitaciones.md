@@ -125,7 +125,7 @@ Del informe [`11-cicd.md`](11-cicd.md):
 | Limitación | Detalle |
 |---|---|
 | **El backend no tiene pruebas unitarias.** `npm test` sigue siendo el `exit 1` que viene por defecto | El informe explica por qué se priorizó la prueba de integración; no por qué no harían falta |
-| **El *runner* autoalojado hay que registrarlo a mano** | Mientras no esté, el *pipeline* publica las imágenes igual y el despliegue queda en espera |
+| **El *runner* autoalojado requiere registro en la máquina** | Hay que levantar el perfil `despliegue` con un token de registro vigente; mientras no escuche, el *pipeline* publica las imágenes y el despliegue queda en espera |
 | **La prueba de humo corre con la base vacía** | No detecta lo que sólo aparece con volumen, como el `heap out of memory` del punto 5 |
 | **El escaneo frena sólo por vulnerabilidades con parche** (`ignore-unfixed`) | Las otras están en la sección 2 y hay que revisarlas a mano |
 | **El despliegue no corre migraciones de esquema** | Es deliberado: una migración no se deshace volviendo la imagen. Pero significa que un cambio de modelo necesita un paso manual |

@@ -225,7 +225,7 @@ Poco, y nada bloquea la entrega.
 | Qué | Quién | Cuándo |
 |---|---|---|
 | **Probar el sitio desde otra red** — el celular con datos móviles, no el WiFi de casa. El `CF-RAY` ya prueba que pasa por Cloudflare, pero una prueba desde afuera es mejor evidencia | Cualquiera | Antes de la presentación |
-| **Registrar el *runner* autoalojado**. Sin él, el trabajo de despliegue de `entrega.yml` queda en `skipped` para siempre: sólo corre desde `main` y sobre `runs-on: [self-hosted, restoya-produccion]`. Está anotado como limitación, así que es una decisión, no un olvido — pero si se quiere demostrar el despliegue automático, hay que registrarlo | Gabriel | Opcional |
+| **Levantar el contenedor runner** con un token vigente y `docker compose --profile despliegue up -d runner`. Sin él, el trabajo de despliegue de `entrega.yml` queda esperando un runner `self-hosted` con la etiqueta `restoya-produccion`; sólo corre desde `main` | Gabriel | Opcional |
 | **Bajar el túnel después de la presentación**: `docker compose --profile tunel down` | Gabriel | Después |
 
 ### Lo que queda sin corregir a propósito, y hay que saber defenderlo

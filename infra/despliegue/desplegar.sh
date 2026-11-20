@@ -56,12 +56,24 @@ registro() { echo "$(date '+%H:%M:%S') | despliegue | $*"; }
 verificar() {
     local i codigo cuerpo
 
+    # Deteccion automatica de URL: si corre en el host usa 127.0.0.1:8080,
+    # si corre en un contenedor Docker usa frontend:80 o host.docker.internal
+    if [ -z "${URL_VERIFICACION:-}" ]; then
+        if curl -fsS -o /dev/null "http://127.0.0.1:8080/" 2>/dev/null; then
+            URL="http://127.0.0.1:8080"
+        elif curl -fsS -o /dev/null "http://frontend:80/" 2>/dev/null; then
+            URL="http://frontend:80"
+        elif curl -fsS -o /dev/null "http://host.docker.internal:8080/" 2>/dev/null; then
+            URL="http://host.docker.internal:8080"
+        fi
+    fi
+
     for i in $(seq 1 "$INTENTOS"); do
         if curl -fsS -o /dev/null "$URL/" 2>/dev/null; then
             break
         fi
         if [ "$i" = "$INTENTOS" ]; then
-            registro "El frente no respondio en $((INTENTOS * 2)) s."
+            registro "El frente no respondio en $((INTENTOS * 2)) s (probado en $URL)."
             return 1
         fi
         sleep 2

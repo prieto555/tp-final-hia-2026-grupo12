@@ -264,31 +264,40 @@ en el repositorio, ni tocar *issues*, ni crear *releases*.
 
 ---
 
-## 8. Cómo registrar el *runner* autoalojado
+## 8. Runner autoalojado en Docker
 
-Hay que hacerlo una sola vez, en la máquina donde corre la aplicación. Necesita
-permiso de administración sobre el repositorio.
+El servicio `runner` está en `infra/compose/docker-compose.yml`, bajo el perfil
+`despliegue`. Usa la etiqueta `restoya-produccion` que pide `entrega.yml` y el
+socket Docker del host para que `desplegar.sh` pueda actualizar la aplicación.
+No se inicia con los perfiles locales por defecto.
+
+Antes de crear el contenedor o recrearlo, genera un token de registro temporal
+(dura una hora) con una cuenta que administre Actions en el repositorio:
 
 ```bash
-gh api -X POST repos/prieto555/tp-integrador-hia-grupo12/actions/runners/registration-token --jq .token
+gh api -X POST repos/prieto555/tp-final-hia-2026-grupo12/actions/runners/registration-token --jq .token
 ```
 
-Después, en la máquina:
+Guárdalo solo en `infra/compose/.env`, en `RUNNER_TOKEN`; no lo subas a Git.
+Completa también `RUTA_RUNNER_EN_EL_DEMONIO` con la ruta que Docker Desktop
+expone para `infra/despliegue/runner-trabajo` en el host. Luego inicia el sitio
+y el runner:
 
 ```bash
-mkdir actions-runner && cd actions-runner
-# Descargar el paquete que indica Settings → Actions → Runners → New self-hosted runner
-./config.sh --url https://github.com/prieto555/tp-integrador-hia-grupo12 --token <el-token> --labels restoya-produccion
-./run.sh
+docker compose --profile app --profile despliegue up -d
 ```
 
-> **Advertencia que corresponde hacer.** Un *runner* autoalojado ejecuta en esa
-> máquina el código de cualquier *workflow* del repositorio. Como el repositorio
-> es **público**, hay que tener desactivado que los *pull requests* de
-> desconocidos disparen *workflows* sin aprobación
-> (Settings → Actions → *Require approval for all outside collaborators*), que
-> es el valor por defecto. Si no, cualquiera podría abrir un PR que corra lo que
-> quiera en la máquina del equipo.
+El runner queda registrado para ese repositorio y escucha trabajos con la
+etiqueta `restoya-produccion`. `entrega.yml` despliega solo cuando la entrega
+corresponde a `main`; para verificarlo, mira el estado en Settings → Actions →
+Runners y luego las ejecuciones del workflow.
+
+> **Acceso privilegiado.** El socket Docker permite controlar los contenedores
+> del host. Un *runner* autoalojado ejecuta código de workflows en esa máquina;
+> como el repositorio es **público**, mantén la aprobación requerida para los
+> *pull requests* de colaboradores externos (Settings → Actions → *Require
+> approval for all outside collaborators*). No ejecutes en este runner código
+> de ramas o PRs no confiables.
 
 ---
 
@@ -362,8 +371,8 @@ pushing manifest for ghcr.io/prieto555/tp-integrador-hia-grupo12/frontend:f9d870
 ```
 
 Eso cierra el entregable **«Publicar las imágenes en un registro»**. El trabajo
-de despliegue sigue en `skipped` y es correcto: sólo corre desde `main` y sobre
-el *runner* autoalojado, que no está registrado (§8 y §9).
+de despliegue queda en espera si el contenedor *runner* no está levantado y
+registrado; solo corre desde `main` (§8 y §9).
 
 > **Para la defensa, lo que vale no es que haya salido verde: es el orden en
 > que salió rojo.** Cuatro fallos encadenados, cada uno tapado por el anterior,
@@ -384,9 +393,10 @@ Lo que **no** está, dicho sin maquillaje:
 2. **Las pruebas de Angular (`ng test`) no corren en CI.** Son las que genera el
    `ng new` y no comprueban nada del negocio; hacerlas correr con
    `ChromeHeadless` agregaría minutos sin agregar información.
-3. **El *runner* autoalojado hay que registrarlo a mano** (sección 8). Mientras
-   no esté, los dos primeros trabajos publican las imágenes igual y el tercero
-   queda en espera.
+3. **El *runner* autoalojado requiere configuración en la máquina** (sección 8):
+   hay que levantar el perfil `despliegue` con un token de registro vigente.
+   Mientras no esté escuchando, los dos primeros trabajos publican las imágenes
+   igual y el tercero queda en espera.
 4. **La prueba de humo corre con la base vacía.** No detecta problemas que sólo
    aparecen con volumen, como el `JavaScript heap out of memory` del punto 5.
 5. **El escaneo frena sólo por vulnerabilidades con parche.** Las que no lo

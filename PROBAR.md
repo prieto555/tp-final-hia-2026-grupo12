@@ -236,8 +236,9 @@ gh run view --log $(gh run list --workflow=entrega.yml --branch develop --limit 
 **Tenés que ver (medido):** las dos imágenes empujadas a `ghcr.io` con su
 digest y las etiquetas `develop` y el SHA.
 
-> El trabajo **Desplegar** queda en `skipped` y es correcto: sólo corre desde
-> `main` y sobre el *runner* autoalojado, que no está registrado.
+> El trabajo **Desplegar** sólo corre desde `main`. Si no hay un contenedor
+> runner registrado y escuchando con la etiqueta `restoya-produccion`, queda
+> esperando un runner disponible.
 
 ---
 
