@@ -190,6 +190,7 @@ jobs:
       # se puede probar a mano en la maquina, que es como se verifico, y no
       # solo "cuando corra el pipeline".
       - name: Desplegar con verificacion y vuelta atras
+        shell: bash
         env:
           VERSION: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: ./infra/despliegue/desplegar.sh "$VERSION"
