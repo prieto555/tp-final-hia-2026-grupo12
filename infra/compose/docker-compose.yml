@@ -6,6 +6,7 @@ name: restoya
 
 services:
   db:
+    profiles: ["simple"]
     image: postgres:16-alpine
     container_name: restoya_db
     # Por defecto Docker da 64 MB de /dev/shm, y PostgreSQL usa memoria
@@ -146,16 +147,14 @@ services:
       - ./pgadmin-servers.json:/pgadmin4/servers.json:ro
     networks:
       - interna
-    depends_on:
-      db:
-        condition: service_healthy
 
   backup:
     image: postgres:16-alpine
     container_name: restoya_backup
     restart: unless-stopped
     environment:
-      PGHOST: db
+      PGHOST: ${DB_HOST:-pgbalanceador}
+      PGPORT: ${DB_PORT:-5000}
       PGDATABASE: ${DB_NAME}
       PGUSER: ${DB_USER}
       PGPASSWORD: ${DB_PASSWORD}
@@ -167,9 +166,6 @@ services:
     entrypoint: ["/bin/sh", "/backup.sh"]
     networks:
       - interna
-    depends_on:
-      db:
-        condition: service_healthy
 
   # --- Aplicacion (punto 7) ---------------------------------------------
   # Se definen aparte para que queden claros los dos perfiles: el stack de
@@ -196,13 +192,13 @@ services:
       #
       #   simple   -> DB_HOST=db          DB_PORT=5432
       #   failover -> DB_HOST=pgbalanceador  DB_PORT=5000
-      DB_HOST: ${DB_HOST:-db}
-      DB_PORT: ${DB_PORT:-5432}
+      DB_HOST: ${DB_HOST:-pgbalanceador}
+      DB_PORT: ${DB_PORT:-5000}
       # Lecturas historicas del tablero contra la replica (punto 6). Si el
       # perfil "replica" no esta levantado, el nombre no resuelve y la
       # aplicacion cae sola al primario: no hace falta tocar nada.
-      DB_REPLICA_HOST: ${DB_REPLICA_HOST:-db-replica}
-      DB_REPLICA_PORT: ${DB_REPLICA_PORT:-5432}
+      DB_REPLICA_HOST: ${DB_REPLICA_HOST:-pgbalanceador}
+      DB_REPLICA_PORT: ${DB_REPLICA_PORT:-5001}
       DB_DIALECT: postgres
       # El arranque no toca el esquema. Ver docs/07-optimizacion-sql.md:
       # sync({alter:true}) recreaba las claves foraneas en cada arranque.
@@ -230,9 +226,6 @@ services:
     # por la red interna. Es el punto 9.5 cumplido por diseno.
     networks:
       - interna
-    depends_on:
-      db:
-        condition: service_healthy
 
   frontend:
     profiles: ["app"]
@@ -364,15 +357,12 @@ services:
       # Se usan las tres variables separadas y no una URL completa a proposito:
       # una contrasena con @ o : rompe la URL de forma silenciosa y el
       # exportador arranca igual, sin metricas y sin error claro.
-      DATA_SOURCE_URI: "db:5432/${DB_NAME}?sslmode=disable"
+      DATA_SOURCE_URI: "${DB_HOST:-pgbalanceador}:${DB_PORT:-5000}/${DB_NAME}?sslmode=disable"
       DATA_SOURCE_USER: ${DB_USER}
       DATA_SOURCE_PASS: ${DB_PASSWORD}
       PG_EXPORTER_EXCLUDE_DATABASES: "template0,template1"
     networks:
       - interna
-    depends_on:
-      db:
-        condition: service_healthy
 
   # Receptor de las alertas. Acepta el POST de Alertmanager, lo deja escrito
   # en su registro y responde 204. Es la evidencia de E10-06.
@@ -900,4 +890,3 @@ volumes:
     name: restoya_n8n_db
   n8n_datos:
     name: restoya_n8n_datos
-
