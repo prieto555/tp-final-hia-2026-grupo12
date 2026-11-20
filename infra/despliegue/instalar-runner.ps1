@@ -1,8 +1,8 @@
 param(
     [Parameter(Mandatory=$false)]
-    [string]$Token,
+    [string]$Token = "BQ5WTSKVMEXA7V6IX67JXWDLADJDS",
     [string]$RepoUrl = "https://github.com/prieto555/tp-final-hia-2026-grupo12",
-    [string]$RunnerDir = "C:\actions-runner"
+    [string]$RunnerDir = "$HOME\actions-runner"
 )
 
 Write-Host "=== Configurando GitHub Self-Hosted Runner para RestoYa ===" -ForegroundColor Cyan
