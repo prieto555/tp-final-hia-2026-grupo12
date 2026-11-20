@@ -295,6 +295,30 @@ jobs:
       - name: Crear el volumen externo
         run: docker volume create restoya_pgdata
 
+      - name: Esperar a que PostgreSQL esté saludable
+        working-directory: infra/compose
+        run: |
+          set -eu
+          docker compose --profile simple up -d db
+          for i in $(seq 1 90); do
+            estado=$(docker inspect -f '{{.State.Health.Status}}' restoya_db)
+            case "$estado" in
+              healthy)
+                echo "PostgreSQL está saludable en el intento $i."
+                exit 0
+                ;;
+              unhealthy)
+                echo "PostgreSQL quedó unhealthy."
+                docker compose --profile simple logs --tail=100 db
+                exit 1
+                ;;
+            esac
+            sleep 2
+          done
+          echo "PostgreSQL no quedó saludable en 180 s."
+          docker compose --profile simple logs --tail=100 db
+          exit 1
+
       - name: Levantar la aplicacion
         working-directory: infra/compose
         run: docker compose --profile app --profile simple up -d --build
