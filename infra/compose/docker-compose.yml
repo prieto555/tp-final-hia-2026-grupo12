@@ -712,6 +712,32 @@ services:
     #
     # Si nginx no esta arriba, Cloudflare devuelve 502 hasta que lo este.
 
+  # ---------------------------------------------------------------------------
+  # GitHub Actions Runner contenerizado (punto 8).
+  #
+  # Corre el runner de GitHub dentro de un contenedor Docker en segundo plano,
+  # escuchando trabajos de despliegue continuo (CD) para la rama main.
+  # Monta el socket de Docker para poder recrear backend y frontend en el host.
+  #
+  #   docker compose --profile runner up -d
+  # ---------------------------------------------------------------------------
+  runner:
+    profiles: ["runner"]
+    image: myoung34/github-runner:ubuntu-jammy
+    container_name: restoya_runner
+    restart: unless-stopped
+    environment:
+      REPO_URL: "https://github.com/prieto555/tp-final-hia-2026-grupo12"
+      RUNNER_TOKEN: ${GITHUB_RUNNER_TOKEN:-BQ5WTSKVMEXA7V6IX67JXWDLADJDS}
+      RUNNER_NAME: "restoya-runner-docker"
+      RUNNER_LABELS: "restoya-produccion"
+      URL_VERIFICACION: "http://frontend:80"
+      DOCKER_PRUNE: "false"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - interna
+
   # ===========================================================================
   # PUNTO 6 (modo alta disponibilidad) — Cluster con FAILOVER AUTOMATICO.
   #
