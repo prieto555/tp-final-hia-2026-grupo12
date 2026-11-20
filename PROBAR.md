@@ -1,0 +1,559 @@
+# Probar el TP, punto por punto
+
+Lista corta para ir comprobando que cada punto de la consigna **funciona de
+verdad**, uno por vez. Cada bloque dice **qué prueba**, el comando, y **qué
+tenés que ver**.
+
+Para instalar desde cero está [`INSTALACION.md`](INSTALACION.md). Esto es para
+cuando ya está levantado.
+
+> **Todas las salidas de abajo están medidas**: se corrió la lista entera el
+> 11/11/2026 con los 23 contenedores arriba. Si algo te da distinto, es que
+> cambió algo — no que el archivo esté desactualizado.
+
+---
+
+## Antes de empezar
+
+```bash
+cd infra/compose
+docker compose --profile app --profile replica --profile monitoreo \
+  --profile incidencias --profile documental --profile automatizacion \
+  --profile tunel up -d
+```
+
+```bash
+docker compose ps --format "{{.Name}}\t{{.State}}"
+```
+
+**Tenés que ver (medido):** 23 contenedores en `running`. Si alguno dice
+`restarting`, no sigas: mirá `docker logs <nombre>`.
+
+> Si Docker Desktop está cerrado, nada de esto anda. Es el impedimento I-01 y
+> pasó cuatro veces el 11/11.
+
+---
+
+## Puntos 1, 2 y 3 — Diagnóstico, Scrum y control de versiones
+
+Estos tres no se prueban con un comando: se comprueban mirando.
+
+**Punto 1 — diagnóstico.** Abrí [`docs/01-descripcion.md`](docs/01-descripcion.md)
+y buscá **D-01**. Cada afirmación del documento cita archivo y línea: elegí una
+cualquiera y verificala. Si una no se sostiene, hay que dudar del resto.
+
+**Punto 2 — Scrum.** Abrí el [tablero](https://trello.com/b/ZF8ZDLWA).
+**Tenés que ver:** las listas Backlog, Sprint, En curso, En revisión y Hecho,
+y tarjetas con criterio de aceptación. Las evidencias de seguimiento
+—bitácora, siete impedimentos y seis cambios de alcance— están en
+[`docs/scrum/seguimiento.md`](docs/scrum/seguimiento.md).
+
+> ⚠️ El tablero tiene **un solo miembro** hasta que los otros cuatro acepten la
+> invitación. Mientras tanto, la tarjeta E2-03 no se puede cerrar.
+
+**Punto 3 — control de versiones.**
+
+```bash
+git log --oneline origin/develop | wc -l && git branch -r | wc -l
+```
+
+**Tenés que ver:** un historial largo —incluye los 150 commits originales de
+RestoYa, traídos con `git subtree` para no perderlo— y varias ramas.
+
+```bash
+gh pr list --state merged --limit 20 --json number,title --jq '.[] | "#\(.number) \(.title)"'
+```
+
+**Tenés que ver (medido):** los PR mergeados, cada uno con su revisión escrita.
+
+> ⚠️ **Ninguno tiene aprobación de otro integrante**, y eso es lo primero que
+> conviene reconocer si lo preguntan. Es el impedimento **I-04**, está escrito
+> sin maquillar en [`docs/scrum/seguimiento.md`](docs/scrum/seguimiento.md), y
+> se cierra con una sola aprobación de un compañero.
+
+---
+
+## Punto 4 — Base contenerizada y cliente de administración
+
+**Qué prueba:** que la base tiene los datos y que pgAdmin la alcanza.
+
+```bash
+docker exec restoya_db psql -U restoya -d restoyadb -At -F' | ' -c \
+  "SELECT 'pedidos', count(*) FROM pedidos
+   UNION ALL SELECT 'detalle_pedidos', count(*) FROM detalle_pedidos
+   UNION ALL SELECT 'pagos', count(*) FROM pagos;"
+```
+
+**Tenés que ver (medido):** `6000000` en las tres. Exactos.
+
+Después abrí **http://127.0.0.1:5050** → `TP Integrador HIA` → doble clic en
+`RestoYa (contenedor)` → `Databases` → `restoyadb` → `Schemas` → `public`.
+**Tenés que ver:** `Tables (12)`.
+
+> ⚠️ Ojo con esto en la defensa: pgAdmin **no pide ninguna credencial**. Es el
+> hallazgo 17 de [`docs/09-seguridad.md`](docs/09-seguridad.md), está
+> documentado y sin corregir a propósito.
+
+---
+
+## Punto 4 (copias) — Backup y restauración
+
+**Qué prueba:** que las copias existen y no están vacías.
+
+```bash
+ls -la infra/compose/backups/*.dump
+```
+
+**Tenés que ver (medido):** archivos de **~466 MB** y **ninguno de 0 bytes**.
+
+```bash
+docker logs restoya_backup --tail 6
+```
+
+**Tenés que ver (medido):**
+
+```
+22:22:27 | Servicio iniciado. Intervalo: 3600s. Retiene: 7 copias.
+22:26:10 | OK   | restoyadb-20261111-222227.dump | 466.8M | 223s | verificado
+```
+
+El `verificado` no es decorativo: el servicio comprueba que el archivo no esté
+vacío **y** que `pg_restore -l` lo pueda leer. Una copia no cuenta como copia
+hasta que pasa las dos.
+
+> **Esto estuvo roto hasta el 11/11, y la historia sirve para la defensa.** La
+> carpeta tenía cuatro archivos de 0 bytes, y el registro mostraba lo mismo en
+> cada arranque —los tres en el mismo segundo—:
+>
+> ```
+> 22:07:59 | Servicio iniciado. Intervalo: 3600s. Retiene: 7 copias.
+> 22:07:59 | ERROR| fallo pg_dump, ver detalle arriba
+> 22:07:59 | ROTA | restoyadb-20261110-162016.dump eliminada por retencion
+> ```
+>
+> Eran **tres errores encadenados**. El servicio arrancaba junto con el stack y
+> volcaba **antes de que la base aceptara conexiones**; `pg_dump -f` dejaba el
+> archivo creado igual; y **la rotación estaba fuera del `if`**, así que corría
+> después del fallo — y como `ls -1t` ordena por fecha, el archivo vacío
+> contaba como la copia más nueva y **empujaba una buena fuera de la retención**.
+>
+> O sea que cada reinicio del stack cambiaba una copia válida por una vacía.
+> Una copia de 0 bytes es **peor que no tener copia**, porque parece respaldo.
+>
+> Si alguna vez vuelve a aparecer un `.dump` de 0 bytes, el arreglo se salió:
+> está en `infra/postgres/backup.sh`.
+
+---
+
+## Punto 5 — Optimización
+
+**Qué prueba:** que los índices están y que la consulta más cara es rápida.
+
+```bash
+docker exec restoya_db psql -U restoya -d restoyadb -c \
+  "SELECT count(*) AS indices FROM pg_indexes WHERE schemaname='public';"
+```
+
+```bash
+docker exec restoya_db psql -U restoya -d restoyadb -c \
+  "EXPLAIN ANALYZE SELECT * FROM pedidos WHERE estado='PENDIENTE' ORDER BY \"fechaCreacion\" DESC LIMIT 50;"
+```
+
+**Tenés que ver (medido):** `28` índices —incluye claves primarias y únicas,
+no sólo los 10 que se agregaron—, y en el `EXPLAIN`:
+
+```
+Limit  (cost=0.43..17.53 rows=50) (actual time=1.456..2.175 rows=50 loops=1)
+  ->  Index Scan Backward using pedidos_cocina on pedidos
+Execution Time: 2.255 ms
+```
+
+Lo que importa es que diga **`Index Scan`** y no `Seq Scan`, y que el tiempo
+sea de milisegundos sobre 6.000.000 de filas. El antes y después completo está
+en [`docs/07-optimizacion-sql.md`](docs/07-optimizacion-sql.md).
+
+---
+
+## Punto 6 — Clúster y replicación
+
+**Qué prueba:** que la réplica está al día y que no acepta escrituras.
+
+```bash
+docker exec restoya_db psql -U restoya -d restoyadb -At -F' | ' -c \
+  "SELECT application_name, state,
+          pg_wal_lsn_diff(sent_lsn, replay_lsn) AS bytes_atras,
+          coalesce(replay_lag::text,'0') AS retraso
+   FROM pg_stat_replication;"
+```
+
+**Tenés que ver (medido):** `walreceiver | streaming | 0 | 0`.
+
+```bash
+docker exec restoya_db_replica psql -U restoya -d restoyadb -c \
+  "INSERT INTO mesas(\"numMesa\") VALUES (9999);"
+```
+
+**Tenés que ver (medido):** `ERROR: cannot execute INSERT in a read-only transaction`.
+**Que falle es el resultado correcto.**
+
+> **No hay failover automático** y hay que decirlo así. La prueba de caída
+> completa está en [`docs/10-cluster.md`](docs/10-cluster.md); el guion es
+> `infra/postgres/simular-caida.sh`.
+
+---
+
+## Punto 7 — Aplicación en contenedores
+
+**Qué prueba:** que el frente, el proxy y la API hablan entre sí.
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/
+curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8080/api/productos
+```
+
+**Tenés que ver (medido):** `200` las dos. La segunda prueba que nginx hace de
+*proxy* de `/api/` y que el backend llega a la base.
+
+> El backend **no publica puerto**. Si intentás `http://127.0.0.1:3000` no hay
+> nada, y está bien: sólo lo alcanza nginx por la red interna.
+
+---
+
+## Punto 8 — CI/CD
+
+**Qué prueba:** que el *pipeline* corre y publica.
+
+```bash
+gh run list --branch develop --limit 4
+```
+
+**Tenés que ver (medido):** `CI … success` y `Entrega … success`.
+
+```bash
+gh run view --log $(gh run list --workflow=entrega.yml --branch develop --limit 1 --json databaseId --jq '.[0].databaseId') | grep "pushing manifest" | head -4
+```
+
+**Tenés que ver (medido):** las dos imágenes empujadas a `ghcr.io` con su
+digest y las etiquetas `develop` y el SHA.
+
+> El trabajo **Desplegar** queda en `skipped` y es correcto: sólo corre desde
+> `main` y sobre el *runner* autoalojado, que no está registrado.
+
+---
+
+## Punto 9 — Publicación en Internet
+
+**Qué prueba:** que se llega desde afuera y que pasa por Cloudflare.
+
+```bash
+curl -sI https://restoya.liners-panel.com/ | grep -iE "^(cf-ray|server|x-frame-options|x-content-type-options)"
+```
+
+**Tenés que ver (medido):** `CF-RAY: …-EZE` —el sufijo es el datacenter de
+Ezeiza, o sea que no es un atajo local— y las dos cabeceras de seguridad.
+
+```bash
+for r in / /metrics /api-docs; do printf "%-12s " "$r"; curl -s "https://restoya.liners-panel.com$r" | wc -c; done
+```
+
+**Tenés que ver (medido):** **16695** las tres. `/metrics` y `/api-docs`
+devuelven el `index.html` de la SPA: **no están protegidos, están fuera del
+camino**, y conviene decirlo con esas palabras.
+
+### Y los cuatro subdominios de las herramientas
+
+```bash
+for h in restoya n8n mantis nube grafana; do
+  printf "%-10s " "$h"
+  curl -s -o /dev/null -w "%{http_code}  CF-RAY=%header{cf-ray}\n" "https://$h.liners-panel.com/"
+done
+```
+
+**Tenés que ver (medido):**
+
+```
+restoya    200  CF-RAY=a5a9b310ffc49294-EZE
+n8n        302  CF-RAY=a5a9b313fdd8bc07-EZE
+mantis     302  CF-RAY=a5a9b3160d81fafe-EZE
+nube       302  CF-RAY=a5a9b3186c8b684e-EZE
+grafana    302  CF-RAY=a5a9b3219ab19b0c-EZE
+```
+
+**El 302 de las cuatro herramientas es lo correcto, no un problema:** cada
+una redirige a su pantalla de ingreso. Y lo que hay que mirar es **a dónde**,
+porque ahí se ve si la herramienta sabe cómo se llama:
+
+```bash
+for h in n8n mantis nube grafana; do
+  printf "%-8s -> " "$h"
+  curl -s -o /dev/null -w "%{http_code} %header{location}\n" "https://$h.liners-panel.com/"
+done
+```
+
+**Tenés que ver (medido):**
+
+```
+n8n      -> 302 https://raspy-bush-a7b1.cloudflareaccess.com/cdn-cgi/access/login/...
+mantis   -> 302 https://mantis.liners-panel.com/login_page.php
+nube     -> 302 https://nube.liners-panel.com/login
+grafana  -> 302 /login
+```
+
+Dos cosas para saber explicar:
+
+- **n8n no redirige a n8n**: redirige a **Cloudflare Access**, que pide correo
+  *antes* de que la petición entre al túnel. Es la mitigación del hallazgo 18
+  y las otras tres **no la tienen**.
+- **Mantis redirige a su propio nombre público**, no a `localhost:8089`. Si
+  alguna vez ves `localhost` ahí, es que falta `DOMINIO_MANTIS` en el
+  `.env`: cada herramienta arma sus enlaces absolutos con lo que le dice esa
+  variable.
+
+Si Nextcloud contesta **"Access through untrusted domain"**, volvé a correr
+`./infra/tunel/preparar-tunel.sh` con Nextcloud levantado: su nombre público
+hay que escribirlo con `occ` adentro del contenedor.
+
+> **La prueba que falta:** abrirlo desde el celular **con datos móviles**, no
+> con el WiFi de casa.
+
+---
+
+## Punto 10 — Monitoreo
+
+**Qué prueba:** que Prometheus ve todo y que las alertas están cargadas.
+
+```bash
+curl -s "http://127.0.0.1:9090/api/v1/targets?state=active" \
+  | node -e 'let b="";process.stdin.on("data",d=>b+=d).on("end",()=>{const t=JSON.parse(b).data.activeTargets;console.log(t.filter(x=>x.health==="up").length+" de "+t.length+" en UP")})'
+```
+
+**Tenés que ver (medido):** `6 de 6 en UP`.
+
+Después abrí **http://127.0.0.1:3001** (Grafana) y el tablero de RestoYa.
+
+> ⚠️ **Abrilo con tiempo.** Grafana sólo dibuja los paneles que entran en
+> pantalla: si lo abrís en el momento, se ve negro.
+
+### La prueba que pide la consigna: se cae un contenedor, llega un correo
+
+Es la cadena más larga del trabajo —Prometheus, Alertmanager, n8n, Mantis y
+el servidor de correo— así que conviene correrla entera y con tiempo: **del
+`docker stop` al correo pasan poco más de dos minutos.**
+
+```bash
+# 1. Tirar un contenedor que Prometheus vigile. cadvisor es el mas inofensivo:
+#    solo deja de haber metricas de contenedores mientras esta abajo.
+date "+%H:%M:%S" && docker stop restoya_cadvisor
+```
+
+```bash
+# 2. Al minuto y medio, la alerta tiene que estar en firing.
+curl -s "http://127.0.0.1:9090/api/v1/alerts" \
+  | node -e 'let b="";process.stdin.on("data",d=>b+=d).on("end",()=>{for(const a of JSON.parse(b).data.alerts)console.log(a.labels.alertname,a.labels.instance,a.state)})'
+```
+
+**Tenés que ver (medido):** `ObjetivoCaido cadvisor:8080 firing`. Antes del
+minuto está en `pending`, que es el `for: 1m` de la regla.
+
+```bash
+# 3. El correo, en el buzon.
+curl -s "http://127.0.0.1:8025/api/v1/messages?limit=3" \
+  | node -e 'let b="";process.stdin.on("data",d=>b+=d).on("end",()=>{const j=JSON.parse(b);console.log("total:",j.total);j.messages.forEach(m=>console.log(" -",m.Created,"|",m.Subject))})'
+```
+
+**Tenés que ver (medido):**
+
+```
+total: 3
+ - 2026-11-14T23:03:10.663Z | [CRITICA] contenedores no responde
+```
+
+Y adentro, la incidencia que F01 abrió en Mantis por la misma caída:
+
+```
+Se abrio la incidencia #25 en Mantis.
+Alerta: ObjetivoCaido
+Servicio: contenedores
+Ver: https://mantis.liners-panel.com/view.php?id=25
+```
+
+```bash
+# 4. Levantarlo y comprobar que NO llega un segundo correo.
+docker start restoya_cadvisor
+# cinco minutos despues:
+docker logs restoya_receptor_alertas --since 10m | grep -o '"status":"resolved"'
+```
+
+**Tenés que ver (medido):** el `"status":"resolved"` en el registro del
+receptor —o sea que el aviso de resuelto **sí** llegó— y el buzón **con la
+misma cantidad de correos que antes**. Una alerta que se resolvió no es una
+urgencia y no tiene que mandar nada.
+
+> **Ese último paso es el que encontró dos defectos el 14/11**, y vale saberlo
+> porque es la clase de cosa que preguntan. El correo decía
+> `[CRITICA] backend no responde` **cuando el backend estaba perfecto**: el
+> flujo leía el estado del lote en vez del de cada alerta, y describía el
+> aviso con la primera de las cuatro que venían adentro. Está contado en
+> [`docs/14-automatizacion.md`](docs/14-automatizacion.md).
+
+> **El correo va a un buzón local (Mailpit), no a Gmail.** Es un envío real
+> por SMTP; lo único que no es definitivo es el destino, porque mandar a Gmail
+> exige una contraseña de aplicación y eso no puede entrar al repositorio.
+
+---
+
+## Punto 11 — Incidencias
+
+**Qué prueba:** que están las 17 con su ciclo completo.
+
+Abrí **http://127.0.0.1:8089** y después pegá esta ruta:
+
+```
+http://127.0.0.1:8089/view_all_set.php?type=1&hide_status=-2&sort=id&dir=ASC&per_page=50
+```
+
+**Tenés que ver (medido):** *«Visualizando incidencias 1 - 17 / 17»*.
+
+> ⚠️ **Sin ese `hide_status=-2` vas a ver UNA sola.** El filtro por defecto
+> esconde las cerradas. Es el error más fácil de cometer en vivo.
+
+---
+
+## Punto 12 — Gestión documental
+
+**Qué prueba:** la estructura y que los permisos del robot son los correctos.
+
+Abrí **http://127.0.0.1:8081** → carpeta `RestoYa`.
+**Tenés que ver:** las seis subcarpetas y el `README.md` renderizado arriba.
+
+**Tenés que ver (medido):** la cuenta de robot hace `PUT` → **201** y
+`DELETE` → **403**. Probar sólo lo permitido no prueba nada; el detalle está en
+[`docs/13-documental.md`](docs/13-documental.md).
+
+---
+
+## Punto 13 — Automatización con n8n
+
+**Qué prueba:** que los tres flujos están activos y que corrieron de verdad.
+
+Abrí **http://127.0.0.1:5678** → *Workflows*, y después *Executions*.
+
+**Tenés que ver (medido):** los **tres flujos en `Active`**, y en ejecuciones
+**los tres errores de F03** (#13, #14, #15) antes de que quedara andando. Ese
+historial con errores vale más que uno prolijo: es la depuración real.
+
+> La interfaz **no pedía ninguna credencial** hasta que se creó la cuenta de
+> propietario. Es el hallazgo 15 de [`docs/09-seguridad.md`](docs/09-seguridad.md).
+
+---
+
+## Punto 14 — Seguridad
+
+**Qué prueba:** que el limitador de login corta, y que D-01 sigue abierto.
+
+```bash
+for i in $(seq 1 11); do
+  printf "intento %2s -> " "$i"
+  curl -s -o /dev/null -w "%{http_code}\n" -X POST http://127.0.0.1:8080/api/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email":"noexiste@restoya.com.ar","password":"malaclave"}'
+done
+```
+
+**Tenés que ver (medido):** diez `401` y del **intento 11 en adelante `429`**.
+
+> ⚠️ Esto **bloquea los ingresos desde esta máquina por 15 minutos**. No lo
+> corras cinco minutos antes de la demostración.
+
+```bash
+curl -s -o /dev/null -w "GET /api/roles sin token -> %{http_code}\n" http://127.0.0.1:8080/api/roles
+```
+
+**Tenés que ver (medido):** **`200`**. Y `/api/funciones` también. Eso es
+**D-01**: diecinueve endpoints sin ninguna autenticación, documentado y **no
+corregido a propósito**. Sigue vigente, así que **hay que bajar el túnel después
+de la presentación**.
+
+Para que se vea el contraste, probá al lado uno que **sí** está protegido:
+
+```bash
+curl -s -o /dev/null -w "GET /api/usuarios sin token -> %{http_code}\n" http://127.0.0.1:8080/api/usuarios
+```
+
+**Tenés que ver (medido):** **`401`**. Esa es la diferencia exacta que hay que
+poder explicar: cinco archivos de rutas no importan el middleware y el resto sí.
+
+### El límite de peticiones de nginx
+
+Sesenta peticiones seguidas a la API, lo más rápido que las manda curl:
+
+```bash
+A=""; for i in $(seq 1 60); do A="$A -o /dev/null http://127.0.0.1:8080/api/roles"; done
+curl -s -w "%{http_code}\n" $A | sort | uniq -c
+```
+
+**Tenés que ver (medido):**
+
+```
+     22 200
+     38 429
+```
+
+Las 22 que pasan son el arranque (`burst=20`) más las que entran por el ritmo
+de 10 r/s mientras corre la prueba. Y queda en el registro de nginx con la
+zona por nombre:
+
+```bash
+docker logs restoya_frontend --since 2m | grep limiting | head -1
+```
+
+```
+[warn] limiting requests, excess: 20.690 by zone "api", client: 172.24.0.1,
+       request: "GET /api/roles HTTP/1.1"
+```
+
+**Y la otra mitad de la prueba, que es la que importa:** que no corte a quien
+no hizo nada.
+
+```bash
+A=""; for i in $(seq 1 25); do A="$A -o /dev/null http://127.0.0.1:8080/"; done
+curl -s -w "%{http_code}\n" $A | sort | uniq -c
+```
+
+**Tenés que ver (medido):** `25 200`. Veinticinco cargas seguidas de la
+página son más de lo que hace una navegación normal, y ninguna se rechaza.
+
+> **Los once intentos de login de más arriba siguen dando diez `401` y un
+> `429`**, y ese `429` lo sigue devolviendo el backend, no nginx. Son dos
+> controles distintos: nginx frena **volumen**, el backend frena **fuerza
+> bruta** contando intentos fallidos por IP en quince minutos. Se verificó
+> después de poner el límite, justamente para no romper una medición que ya
+> estaba documentada.
+
+El detalle de las tres capas —Cloudflare, nginx y el backend— y de lo que
+**no** resuelven está en la sección 19 de
+[`docs/09-seguridad.md`](docs/09-seguridad.md).
+
+---
+
+## Punto 15 — Documentación
+
+```bash
+ls docs/*.md | wc -l && ls docs/capturas/*.png | wc -l
+```
+
+**Tenés que ver (medido):** **18** documentos y **19** capturas.
+
+El índice de cuál de los 16 obligatorios está en qué archivo es
+[`docs/README.md`](docs/README.md).
+
+---
+
+## Al terminar
+
+```bash
+cd infra/compose && docker compose --profile tunel down
+```
+
+**Bajá el túnel.** Mientras esté arriba, los diecinueve endpoints de D-01 son
+alcanzables desde Internet.
