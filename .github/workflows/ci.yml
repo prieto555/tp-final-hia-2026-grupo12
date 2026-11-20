@@ -232,6 +232,12 @@ jobs:
           N8N_USER=admin
           N8N_PORT=5678
           SWAGGER_USER=swagger
+          # Compose interpola tambien servicios de perfiles que no se levantan.
+          # Estos valores solo satisfacen la validacion; el perfil despliegue no
+          # se activa en CI y el token no se utiliza.
+          RUNNER_REPO_URL=https://github.com/prieto555/tp-final-hia-2026-grupo12
+          RUNNER_TOKEN=ci-no-se-utiliza
+          RUTA_RUNNER_EN_EL_DEMONIO=/tmp/runner-work
           FIN
           # Las claves se generan al vuelo y no se imprimen.
           {
