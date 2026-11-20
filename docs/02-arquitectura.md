@@ -114,7 +114,7 @@ explícita y con el motivo.
 | **El certificado de Cloudflare** (`~/.cloudflared/cert.pem`) | Es la llave de la cuenta entera, no de este proyecto. Al contenedor del túnel sólo entra el archivo de credenciales de **ese** túnel. |
 | **Las copias de seguridad** | `infra/compose/backups/` es una carpeta de la máquina, montada en los contenedores. Una copia que vive dentro del mismo volumen que la base no es una copia: se borra con ella. |
 | **Los datos de PostgreSQL** | En un volumen con nombre (`restoya_pgdata`), declarado `external: true` porque existía antes de este *compose*. Si estuvieran en la capa de escritura del contenedor, `docker compose down` se los llevaría. |
-| **El runner de GitHub Actions para el despliegue** | El job de despliegue necesita correr en esta máquina, que está detrás de CGNAT y no es alcanzable desde los runners de GitHub. Por eso es *self-hosted* y no un contenedor. |
+| **El runner de GitHub Actions para el despliegue** | El job corre en un contenedor *self-hosted* de este Compose, en la máquina detrás de CGNAT. El perfil `despliegue` lo conecta a GitHub y al socket de Docker del host. |
 | **Docker Desktop y WSL2** | Son el sustrato. No tiene sentido contenedorizar el motor. |
 
 ---

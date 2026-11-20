@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory=$false)]
-    [string]$Token = "BQ5WTSKVMEXA7V6IX67JXWDLADJDS",
+    [string]$Token = "",
     [string]$RepoUrl = "https://github.com/prieto555/tp-final-hia-2026-grupo12",
     [string]$RunnerDir = "$HOME\actions-runner"
 )
